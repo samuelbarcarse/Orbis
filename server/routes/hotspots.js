@@ -124,6 +124,8 @@ async function getOrComputeHotspots() {
         latitude: m.lat,
         longitude: m.lng,
         timestamp: m.timestamp,
+        vessel_name: m.vesselName || null,
+        mmsi: m.mmsi || null,
         confidence: 0.85,
       })),
     };

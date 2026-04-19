@@ -23,7 +23,7 @@ export default function ChatAssistant({ selectedHotspot, open: openProp, onOpenC
     {
       role: 'assistant',
       content:
-        "Hi — I'm Orbis AI. Click a red hotspot on the globe, then ask me anything about illegal fishing activity, SAR detections, or environmental impact.",
+        "Hi — I'm Orbis AI. Click a red hotspot on the globe, then ask me anything about vessel activity in the area, wildlife impact, or ecosystem health.",
     },
   ]);
   const [input, setInput] = useState('');
@@ -147,7 +147,7 @@ export default function ChatAssistant({ selectedHotspot, open: openProp, onOpenC
                 <Input
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  placeholder="Ask about hotspots, SAR detections…"
+                  placeholder="Ask about vessel activity, wildlife impact…"
                   className="flex-1 bg-muted border-0 text-sm"
                 />
                 <Button type="submit" size="icon" disabled={loading || !input.trim()} className="h-9 w-9">

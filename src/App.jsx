@@ -12,7 +12,7 @@ const SignInPage = () => (
     <div className="flex flex-col items-center gap-6">
       <div className="text-center">
         <h1 className="text-2xl font-bold tracking-tight">Orbis</h1>
-        <p className="text-sm text-muted-foreground mt-1">Illegal Fishing Intelligence Platform</p>
+        <p className="text-sm text-muted-foreground mt-1">Ocean Wildlife Impact Monitor</p>
       </div>
       <SignIn routing="hash" />
     </div>

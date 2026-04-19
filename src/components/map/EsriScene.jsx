@@ -3,7 +3,7 @@
 // Loads the WebScene you built in ArcGIS Online, then adds the live
 // GFW vessel / hotspot layers on top.
 
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 
 import '@arcgis/map-components/dist/components/arcgis-scene';
 import '@arcgis/map-components/dist/components/arcgis-zoom';
@@ -28,10 +28,10 @@ if (import.meta.env.VITE_ARCGIS_API_KEY) {
 
 const EMPTY_FC = { type: 'FeatureCollection', features: [] };
 
-export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoaded, coralVisible }) {
-  const sceneRef      = useRef(null);
-  const coralLayerRef = useRef(null);
-  const { getToken }  = useAuth();
+const EsriScene = forwardRef(function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoaded }, ref) {
+  const sceneRef  = useRef(null);
+  const viewRef   = useRef(null);
+  const { getToken } = useAuth();
 
   const onSelectHotspotRef = useRef(onSelectHotspot);
   const onSelectVesselRef  = useRef(onSelectVessel);
@@ -40,9 +40,14 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
   useEffect(() => { onSelectVesselRef.current  = onSelectVessel;  }, [onSelectVessel]);
   useEffect(() => { onDataRef.current          = onDataLoaded;    }, [onDataLoaded]);
 
-  useEffect(() => {
-    if (coralLayerRef.current) coralLayerRef.current.visible = !!coralVisible;
-  }, [coralVisible]);
+  useImperativeHandle(ref, () => ({
+    resetCamera: () => {
+      viewRef.current?.goTo(
+        { position: { longitude: 10, latitude: 15, z: 22_000_000 } },
+        { duration: 1200, easing: 'ease-in-out' }
+      ).catch(() => {});
+    },
+  }));
 
   useEffect(() => {
     const el = sceneRef.current;
@@ -73,6 +78,7 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
     const handleViewReady = async () => {
       const view = el.view; // SceneView
       if (!view || destroyed) return;
+      viewRef.current = view;
 
       // ── Restore the deep-space globe look ─────────────────────────────
       // If a WebScene item-id is loaded these are already set from your scene,
@@ -95,11 +101,10 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
 
       // ── Fetch all data in parallel ─────────────────────────────────────
       const token = await getToken();
-      const [vessels, detections, hotspots, coral] = await Promise.all([
+      const [vessels, detections, hotspots] = await Promise.all([
         fetchJson('/api/vessels',    token),
         fetchJson('/api/detections', token),
         fetchJson('/api/hotspots',   token),
-        fetchJson('/api/coral',      token),
       ]);
       if (destroyed) return;
       onDataRef.current?.({ vessels, detections, hotspots });
@@ -119,7 +124,7 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
       // ── SAR Detections ─────────────────────────────────────────────────
       const sarLayer = new GeoJSONLayer({
         url: toBlobUrl(detections),
-        title: 'SAR Detections (Sentinel-1)',
+        title: 'Detected Vessels (Sentinel-1)',
         visible: false,
         outFields: ['*'],
         renderer: {
@@ -128,7 +133,7 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
           uniqueValueInfos: [
             {
               value: true,
-              label: 'Dark vessel (no AIS)',
+              label: 'Untracked vessel',
               symbol: { type: 'simple-marker', style: 'x', color: [239, 68, 68, 1], size: 14, outline: { color: [239, 68, 68, 1], width: 2 } },
             },
             {
@@ -143,7 +148,7 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
       // ── Illegal Fishing Hotspots ───────────────────────────────────────
       hotspotsLayer = new GeoJSONLayer({
         url: toBlobUrl(hotspots),
-        title: 'Illegal Fishing Hotspots',
+        title: 'Vessel Activity Hotspots',
         outFields: ['*'],
         renderer: {
           type: 'simple',
@@ -155,28 +160,7 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
         },
       });
 
-      // ── Coral Reef Health ──────────────────────────────────────────────
-      const coralLayer = new GeoJSONLayer({
-        url: toBlobUrl(coral),
-        title: 'Coral Reef Health',
-        visible: !!coralVisible,
-        outFields: ['*'],
-        renderer: {
-          type: 'simple',
-          symbol: { type: 'simple-marker', style: 'circle', color: [52, 211, 153, 0.65], size: 10, outline: { color: [52, 211, 153, 0.9], width: 1.5 } },
-          visualVariables: [{
-            type: 'color', field: 'bleaching_risk',
-            stops: [
-              { value: 20, color: [52, 211, 153, 0.8] },
-              { value: 50, color: [251, 191, 36, 0.85] },
-              { value: 80, color: [239, 68, 68, 0.9] },
-            ],
-          }],
-        },
-      });
-      coralLayerRef.current = coralLayer;
-
-      view.map.addMany([coralLayer, sarLayer, vesselLayer, hotspotsLayer]);
+      view.map.addMany([sarLayer, vesselLayer, hotspotsLayer]);
 
       // ── Click: hotspots priority, then vessels ─────────────────────────
       view.on('click', async (clickEvent) => {
@@ -210,7 +194,7 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
 
     return () => {
       destroyed = true;
-      coralLayerRef.current = null;
+      viewRef.current = null;
       el.removeEventListener('arcgisViewReadyChange', handleViewReady);
       blobUrls.forEach((u) => URL.revokeObjectURL(u));
     };
@@ -223,9 +207,8 @@ export default function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoade
       theme="dark"
       style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
     >
-      <arcgis-zoom position="top-left" />
-      <arcgis-layer-list position="top-right" />
-      <arcgis-legend position="bottom-right" />
     </arcgis-scene>
   );
-}
+});
+
+export default EsriScene;

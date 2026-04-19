@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react';
+import { useAuth } from '@clerk/clerk-react';
 import {
   X, Loader2, Sparkles, MessageCircle, ShieldAlert, Ship, MapPin,
   AlertCircle, ExternalLink, HandHelping, Leaf, FlaskConical, TrendingDown, Clock,
@@ -7,61 +8,7 @@ import {
 import ReactMarkdown from 'react-markdown';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { generateImpactSummary, generateSpeciesImpact, computePressureScore } from '@/lib/geminiClient';
-
-// ─── Shared helpers ───────────────────────────────────────────────────────────
-
-const ACTIONS = [
-  {
-    title: 'Choose sustainable seafood',
-    detail: 'Look for the blue MSC certified label. Certified seafood comes from independently verified sustainable and legal fisheries.',
-    org: 'Marine Stewardship Council',
-    search: 'Marine Stewardship Council sustainable seafood',
-  },
-  {
-    title: 'Report suspicious vessel activity',
-    detail: 'Global Fishing Watch lets the public monitor fishing vessels worldwide and flag suspicious activity to enforcement agencies.',
-    org: 'Global Fishing Watch',
-    search: 'Global Fishing Watch map',
-  },
-  {
-    title: 'Support ocean conservation',
-    detail: 'Organisations like Oceana and Sea Shepherd fund legal action and investigations that directly target illegal fishing fleets.',
-    org: 'Oceana · Sea Shepherd',
-    search: 'Oceana ocean conservation donate',
-  },
-];
-
-function buildReasons(h) {
-  const reasons = [];
-  reasons.push({
-    headline: 'Tracking disabled',
-    detail: `${h.vessel_count > 1 ? `All ${h.vessel_count} vessels have` : 'This vessel has'} switched off their AIS transponder — the GPS system every commercial vessel is legally required to keep on. Turning it off is a known tactic to avoid coast guard detection.`,
-  });
-  if (h.in_mpa) {
-    reasons.push({
-      headline: 'Fishing inside a protected area',
-      detail: `${h.nearest_mpa} is a Marine Protected Area where fishing is banned to protect wildlife and ecosystems. Any vessel operating here is breaking international maritime law.`,
-    });
-  } else if (h.proximity_to_mpa_km <= 20) {
-    reasons.push({
-      headline: 'Operating on the edge of a protected zone',
-      detail: `These vessels are only ${h.proximity_to_mpa_km} km from ${h.nearest_mpa ?? 'a marine reserve'}, undermining conservation efforts for populations that breed inside the reserve.`,
-    });
-  }
-  if (h.vessel_count >= 5) {
-    reasons.push({
-      headline: 'Coordinated fleet activity',
-      detail: `${h.vessel_count} vessels operating together — all without tracking — is consistent with an organised "dark fleet" that can strip an area of fish in days.`,
-    });
-  } else {
-    reasons.push({
-      headline: 'Suspicious clustering',
-      detail: 'Tightly grouped vessels targeting a specific fish school with disabled tracking is a strong indicator of illegal harvesting.',
-    });
-  }
-  return reasons;
-}
+import { generateThreatAnalysis, getCachedThreatAnalysis, generateSpeciesImpact, getCachedSpeciesImpact, computePressureScore } from '@/lib/geminiClient';
 
 const SEVERITY = {
   high:   { label: 'High Risk',     bg: 'bg-destructive/15 text-destructive border-destructive/30' },
@@ -104,19 +51,32 @@ function PressureGauge({ score }) {
 // ─── Tab content components ───────────────────────────────────────────────────
 
 function ThreatTab({ hotspot, sev }) {
-  const [summary, setSummary] = useState('');
-  const [loading, setLoading] = useState(false);
+  const { getToken } = useAuth();
+  const cached = getCachedThreatAnalysis(hotspot?.id);
+  const [analysis, setAnalysis] = useState(cached);
+  const [loading, setLoading] = useState(!cached);
 
   useEffect(() => {
     if (!hotspot) return;
+    const already = getCachedThreatAnalysis(hotspot.id);
+    if (already) { setAnalysis(already); setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
-    setSummary('');
-    generateImpactSummary(hotspot)
-      .then((s) => { if (!cancelled) setSummary(s); })
+    setAnalysis(null);
+    getToken()
+      .then((token) => generateThreatAnalysis(hotspot, token))
+      .then((a) => { if (!cancelled) setAnalysis(a); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [hotspot?.id]);
+
+  const skeletonRows = (n) => Array.from({ length: n }, (_, i) => (
+    <div key={i} className="bg-muted/50 rounded-xl p-3 space-y-1.5 animate-pulse">
+      <div className="h-2.5 w-2/5 bg-muted-foreground/20 rounded" />
+      <div className="h-2 w-full bg-muted-foreground/10 rounded" />
+      <div className="h-2 w-4/5 bg-muted-foreground/10 rounded" />
+    </div>
+  ));
 
   return (
     <div className="flex-1 overflow-auto">
@@ -128,7 +88,7 @@ function ThreatTab({ hotspot, sev }) {
           </div>
           <div>
             <p className="text-2xl font-bold leading-none">{hotspot.vessel_count}</p>
-            <p className="text-xs text-muted-foreground mt-0.5">dark vessels — no AIS signal</p>
+            <p className="text-xs text-muted-foreground mt-0.5">vessels detected in area</p>
           </div>
         </div>
 
@@ -164,36 +124,39 @@ function ThreatTab({ hotspot, sev }) {
         </div>
       </div>
 
-      {/* Why flagged */}
+      {/* Why this matters */}
       <div className="p-5 space-y-3 border-b border-border">
         <div className="flex items-center gap-2">
           <AlertCircle className="w-3.5 h-3.5 text-destructive" />
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Why this is flagged</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-destructive">Why this matters</p>
         </div>
         <div className="space-y-2">
-          {buildReasons(hotspot).map((r, i) => (
-            <div key={i} className="bg-muted/50 rounded-xl p-3 space-y-1">
-              <p className="text-xs font-semibold">{r.headline}</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">{r.detail}</p>
-            </div>
-          ))}
+          {loading
+            ? skeletonRows(3)
+            : (analysis?.reasons ?? []).map((r, i) => (
+                <div key={i} className="bg-muted/50 rounded-xl p-3 space-y-1">
+                  <p className="text-xs font-semibold">{r.headline}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{r.detail}</p>
+                </div>
+              ))}
         </div>
       </div>
 
-      {/* AI Impact */}
+      {/* Environmental Impact */}
       <div className="p-5 space-y-3 border-b border-border">
         <div className="flex items-center gap-2">
           <Sparkles className="w-3.5 h-3.5 text-primary" />
           <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">Environmental Impact</p>
         </div>
         {loading ? (
-          <div className="flex items-center gap-2 py-4 justify-center">
-            <Loader2 className="w-4 h-4 animate-spin text-primary" />
-            <span className="text-xs text-muted-foreground">Analysing impact…</span>
+          <div className="space-y-1.5 animate-pulse">
+            {[1, 0.9, 1, 0.7, 1, 0.85].map((w, i) => (
+              <div key={i} className={`h-2 bg-muted-foreground/10 rounded`} style={{ width: `${w * 100}%` }} />
+            ))}
           </div>
         ) : (
           <div className="prose prose-sm prose-slate dark:prose-invert max-w-none text-xs leading-relaxed [&>h2]:text-[11px] [&>h2]:font-semibold [&>h2]:uppercase [&>h2]:tracking-wider [&>h2]:text-foreground [&>h2]:mt-3 [&>h2]:mb-1 [&>p]:my-1">
-            <ReactMarkdown>{summary}</ReactMarkdown>
+            <ReactMarkdown>{analysis?.impact ?? ''}</ReactMarkdown>
           </div>
         )}
       </div>
@@ -205,21 +168,23 @@ function ThreatTab({ hotspot, sev }) {
           <p className="text-[10px] font-semibold uppercase tracking-wider text-primary">What you can do</p>
         </div>
         <div className="space-y-2">
-          {ACTIONS.map((a, i) => (
-            <div key={i} className="bg-muted/50 rounded-xl p-3 space-y-1">
-              <p className="text-xs font-semibold">{a.title}</p>
-              <p className="text-xs text-muted-foreground leading-relaxed">{a.detail}</p>
-              {a.search && (
-                <button
-                  onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(a.search)}`, '_blank')}
-                  className="mt-1 flex items-center gap-1 text-[10px] text-primary hover:underline"
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  {a.org}
-                </button>
-              )}
-            </div>
-          ))}
+          {loading
+            ? skeletonRows(3)
+            : (analysis?.actions ?? []).map((a, i) => (
+                <div key={i} className="bg-muted/50 rounded-xl p-3 space-y-1">
+                  <p className="text-xs font-semibold">{a.title}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{a.detail}</p>
+                  {a.search && (
+                    <button
+                      onClick={() => window.open(`https://www.google.com/search?q=${encodeURIComponent(a.search)}`, '_blank')}
+                      className="mt-1 flex items-center gap-1 text-[10px] text-primary hover:underline"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      {a.org}
+                    </button>
+                  )}
+                </div>
+              ))}
         </div>
       </div>
     </div>
@@ -227,12 +192,15 @@ function ThreatTab({ hotspot, sev }) {
 }
 
 function SpeciesTab({ hotspot }) {
-  const [result, setResult] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const cachedSpecies = getCachedSpeciesImpact(hotspot?.id);
+  const [result, setResult] = useState(cachedSpecies);
+  const [loading, setLoading] = useState(!cachedSpecies);
   const score = hotspot ? computePressureScore(hotspot) : 0;
 
   useEffect(() => {
     if (!hotspot) return;
+    const already = getCachedSpeciesImpact(hotspot.id);
+    if (already) { setResult(already); setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
     setResult(null);
@@ -252,7 +220,7 @@ function SpeciesTab({ hotspot }) {
       <div className="bg-muted/40 rounded-xl p-4 space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Hotspot context</p>
         {[
-          { icon: TrendingDown, label: `${hotspot.vessel_count} dark vessels detected`, tone: 'text-destructive' },
+          { icon: TrendingDown, label: `${hotspot.vessel_count} vessels in area`, tone: 'text-destructive' },
           {
             icon: Clock,
             label: hotspot.in_mpa
@@ -338,7 +306,7 @@ export default function HotspotPanel({ hotspot, onClose, onAskAI }) {
           {/* Tab bar */}
           <div className="flex border-b border-border flex-shrink-0">
             {[
-              { id: 'threat', label: 'Threat Analysis', icon: ShieldAlert },
+              { id: 'threat', label: 'Impact Analysis', icon: ShieldAlert },
               { id: 'species', label: 'Species Forecast', icon: Leaf },
             ].map(({ id, label, icon: Icon }) => (
               <button
@@ -370,7 +338,7 @@ export default function HotspotPanel({ hotspot, onClose, onAskAI }) {
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl hover:bg-muted text-muted-foreground hover:text-foreground text-sm font-medium transition-colors"
             >
               <MessageCircle className="w-4 h-4" />
-              Ask AI about this hotspot
+              Ask AI about this area
             </button>
           </div>
         </motion.div>

@@ -153,7 +153,7 @@ export default function SpeciesForecast({ hotspot, onClose }) {
                     <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Hotspot context</p>
                     <div className="space-y-2">
                       {[
-                        { icon: TrendingDown, label: `${hotspot.vessel_count} dark vessels detected`, tone: 'text-destructive' },
+                        { icon: TrendingDown, label: `${hotspot.vessel_count} vessels in area`, tone: 'text-destructive' },
                         { icon: Clock,        label: hotspot.in_mpa ? `Inside ${hotspot.nearest_mpa}` : `${hotspot.proximity_to_mpa_km} km from nearest reserve`, tone: hotspot.in_mpa ? 'text-destructive' : 'text-muted-foreground' },
                         { icon: Leaf,         label: `Severity: ${String(hotspot.severity).charAt(0).toUpperCase() + String(hotspot.severity).slice(1)}`, tone: 'text-muted-foreground' },
                       ].map((item, i) => (

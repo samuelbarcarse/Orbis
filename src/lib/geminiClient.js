@@ -2,7 +2,7 @@
 // Gemini client for Orbis — illegal-fishing impact summaries + chat assistant.
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 const GEMINI_URL = (key) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${key}`;
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
 
 async function callGemini(prompt, { temperature = 0.3, maxTokens = 900 } = {}) {
   if (!GEMINI_API_KEY) throw new Error('NO_API_KEY');
@@ -22,7 +22,7 @@ async function callGemini(prompt, { temperature = 0.3, maxTokens = 900 } = {}) {
 function hotspotContextBlock(h) {
   if (!h) return 'No hotspot selected.';
   return [
-    `- Dark vessels detected: ${h.vessel_count}`,
+    `- Vessels detected in area: ${h.vessel_count}`,
     `- DBSCAN density score: ${h.density_score}`,
     `- Severity: ${h.severity}`,
     `- Avg SAR confidence: ${h.avg_confidence ?? 'n/a'}`,
@@ -32,46 +32,199 @@ function hotspotContextBlock(h) {
   ].join('\n');
 }
 
-function buildTemplateImpact(h) {
+function buildTemplateThreatAnalysis(h) {
   const catchEst = Math.round((h?.vessel_count || 3) * 4.2 * 24);
   const mpaLine = h?.in_mpa
     ? `Activity inside ${h?.nearest_mpa || 'a protected area'} compounds the damage — MPAs concentrate spawning biomass and fragile benthic habitat.`
     : `Activity sits ${h?.proximity_to_mpa_km ?? '—'} km from the nearest MPA; spill-over effects on protected populations are plausible.`;
-  return `## Estimated Illegal Catch
-Roughly **${catchEst} tonnes/day** of un-reported catch if the ${h?.vessel_count || 'detected'} dark vessels are operating as trawlers. This figure is indicative only; true volume depends on vessel class and gear.
+  return {
+    reasons: [
+      {
+        headline: 'High vessel density',
+        detail: `${h?.vessel_count || 'Multiple'} vessels concentrated in a small zone stresses local fish populations, disrupts feeding grounds, and increases the risk of habitat damage.`,
+      },
+      {
+        headline: h?.in_mpa ? 'Activity inside a protected area' : 'Proximity to protected waters',
+        detail: mpaLine,
+      },
+      {
+        headline: 'Cumulative ecosystem pressure',
+        detail: `Dense, sustained vessel activity in one area can tip a local ecosystem past its recovery threshold — effects on the food web can persist for years even after vessels leave.`,
+      },
+    ],
+    impact: `## Estimated Catch Impact
+Roughly **${catchEst} tonnes/day** if the ${h?.vessel_count || 'detected'} vessels are operating as trawlers. This is indicative only; true volume depends on vessel class and gear type.
 
 ## Ecosystem Impact
-${mpaLine} Loss of top predators and bycatch of non-target species are the most likely consequences, with cascading effects on the food web.
+${mpaLine} Loss of apex predators and bycatch of non-target species are the most likely consequences, with cascading effects across the food web.
 
 ## Economic Impact on Local Communities
-Unreported landings displace legal catch revenue and erode the tax base that funds local fisheries management. Small-scale fishers nearby typically lose 10–25% of projected seasonal income when persistent dark-vessel activity goes unchecked.`;
+High vessel density displaces catch from local fishing communities and strains fisheries management resources. Small-scale fishers nearby can lose 10–25% of projected seasonal income when persistent vessel pressure goes unchecked.
+
+## Long-term Outlook
+If activity continues at this intensity, localised depletion of key species is likely within 6–12 months. Full ecosystem recovery — even if pressure stops today — typically takes 5–20 years depending on species and habitat type.`,
+    actions: [
+      {
+        title: 'Monitor vessel activity globally',
+        detail: 'Global Fishing Watch lets the public track fishing vessels worldwide and flag areas of high activity to conservation organisations.',
+        org: 'Global Fishing Watch',
+        search: 'Global Fishing Watch map',
+      },
+      {
+        title: 'Choose sustainable seafood',
+        detail: 'Look for the MSC blue label. Certified seafood comes from fisheries independently verified to be sustainable.',
+        org: 'Marine Stewardship Council',
+        search: 'Marine Stewardship Council sustainable seafood',
+      },
+      {
+        title: 'Support ocean conservation',
+        detail: 'Organisations like Oceana and WWF Ocean fund research and advocacy that directly address overfishing and habitat loss.',
+        org: 'Oceana · WWF Ocean',
+        search: 'Oceana ocean conservation',
+      },
+    ],
+  };
 }
 
-export async function generateImpactSummary(hotspot) {
-  const prompt = `You are an ocean-intelligence analyst writing for a marine enforcement audience. Produce a concise environmental-impact brief for the following illegal fishing hotspot.
+function extractSection(text, tag) {
+  const m = text.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'));
+  return m ? m[1].trim() : '';
+}
 
-HOTSPOT CONTEXT:
+function parseDelimitedResponse(text) {
+  const reasonsRaw = extractSection(text, 'reasons');
+  const impact     = extractSection(text, 'impact');
+  const actionsRaw = extractSection(text, 'actions');
+  if (!reasonsRaw || !impact || !actionsRaw) return null;
+
+  const reasons = reasonsRaw.split(/\n---\n/).map((block) => {
+    const h = block.match(/headline:\s*(.+)/i)?.[1]?.trim() ?? '';
+    const d = block.match(/detail:\s*([\s\S]+)/i)?.[1]?.trim() ?? '';
+    return h ? { headline: h, detail: d } : null;
+  }).filter(Boolean);
+
+  const actions = actionsRaw.split(/\n---\n/).map((block) => {
+    const t  = block.match(/title:\s*(.+)/i)?.[1]?.trim() ?? '';
+    const d  = block.match(/detail:\s*(.+)/i)?.[1]?.trim() ?? '';
+    const o  = block.match(/org:\s*(.+)/i)?.[1]?.trim() ?? '';
+    const s  = block.match(/search:\s*(.+)/i)?.[1]?.trim() ?? '';
+    return t ? { title: t, detail: d, org: o, search: s } : null;
+  }).filter(Boolean);
+
+  return reasons.length && actions.length ? { reasons, impact, actions } : null;
+}
+
+// Persists for the browser session — re-clicking the same hotspot returns instantly.
+// Only successful Gemini results are stored; fallbacks are never cached.
+const _threatCache = new Map();
+
+export function getCachedThreatAnalysis(id) {
+  return _threatCache.get(String(id)) ?? null;
+}
+
+async function fetchFullHotspot(id, token) {
+  try {
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    const res = await fetch(`/api/hotspots/${id}`, { headers });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+function vesselListBlock(detections) {
+  if (!detections?.length) return 'No individual vessel data available.';
+  const rows = detections.slice(0, 20).map((d, i) => {
+    const name = d.vessel_name && d.vessel_name !== 'Unknown' ? d.vessel_name : `Vessel ${i + 1}`;
+    const mmsi = d.mmsi ? ` (MMSI: ${d.mmsi})` : '';
+    const ts = d.timestamp ? ` — last seen ${new Date(d.timestamp).toUTCString()}` : '';
+    const pos = `${(+d.latitude).toFixed(3)}°, ${(+d.longitude).toFixed(3)}°`;
+    return `- ${name}${mmsi} at ${pos}${ts}`;
+  });
+  if (detections.length > 20) rows.push(`…and ${detections.length - 20} more vessels`);
+  return rows.join('\n');
+}
+
+export async function generateThreatAnalysis(hotspot, token) {
+  const cacheKey = String(hotspot?.id);
+  if (_threatCache.has(cacheKey)) return _threatCache.get(cacheKey);
+
+  const full = await fetchFullHotspot(hotspot.id, token);
+  const detections = full?.detections ?? [];
+
+  const timeRange = full?.time_range?.from && full?.time_range?.to
+    ? `${new Date(full.time_range.from).toDateString()} – ${new Date(full.time_range.to).toDateString()}`
+    : 'unknown';
+
+  const prompt = `You are a marine ecologist analysing a vessel activity hotspot for a conservation audience.
+
+CLUSTER SUMMARY:
 ${hotspotContextBlock(hotspot)}
+- Activity time range: ${timeRange}
 
-Write exactly three markdown sections — no preamble, no closing remarks:
-## Estimated Illegal Catch
-(2–3 sentences with a rough tonnage range and the assumptions behind it)
+INDIVIDUAL VESSELS IN THIS CLUSTER (${detections.length} total):
+${vesselListBlock(detections)}
+
+Reply using EXACTLY this structure with the XML tags and --- separators. No other text outside the tags.
+
+<reasons>
+headline: [unique headline naming the specific ocean region]
+detail: [2 sentences — concrete wildlife consequence specific to THIS location and vessel mix]
+---
+headline: [second reason]
+detail: [2 sentences]
+---
+headline: [third reason]
+detail: [2 sentences]
+</reasons>
+
+<impact>
+## Estimated Catch Impact
+[2–3 sentences. Base estimate on actual vessel names/flags — reason from what fishery is typical here, not a fixed formula. Be explicit about your assumptions.]
 
 ## Ecosystem Impact
-(2–3 sentences on biodiversity loss, bycatch, and MPA / habitat consequences)
+[3–4 sentences. Name the 2–3 specific species or habitats most at risk at these exact coordinates. Explain why they are vulnerable here — no generic "apex predator" filler.]
 
 ## Economic Impact on Local Communities
-(2–3 sentences on lost revenue, displaced small-scale fishers, and tax-base effects)
+[2–3 sentences. Name the actual nearest coastal nations or port cities. Describe the specific livelihoods affected.]
 
-Be specific, plain-language, and quantitative where reasonable. Do not use bullet points inside sections.`;
+## Long-term Outlook
+[2–3 sentences. Concrete projection for this cluster's size and location. Recovery timeline for the species you named above.]
+</impact>
+
+<actions>
+title: [action title tailored to this region]
+detail: [1–2 sentences on why this helps specifically here, referencing vessel flags/names if relevant]
+org: [specific organisation name]
+search: [Google-searchable string to find org]
+---
+title: [second action]
+detail: [...]
+org: [...]
+search: [...]
+---
+title: [third action]
+detail: [...]
+org: [...]
+search: [...]
+</actions>`;
 
   try {
-    const text = await callGemini(prompt, { temperature: 0.4, maxTokens: 700 });
-    return text.trim() || buildTemplateImpact(hotspot);
+    const text = await callGemini(prompt, { temperature: 0.4, maxTokens: 1600 });
+    const parsed = parseDelimitedResponse(text);
+
+    if (parsed) {
+      _threatCache.set(cacheKey, parsed);
+      return parsed;
+    }
+
+    console.warn('[geminiClient] delimiter parse failed, raw text:', text?.slice(0, 200));
+    return buildTemplateThreatAnalysis(hotspot); // not cached — will retry
   } catch (err) {
-    if (err.message === 'NO_API_KEY') return buildTemplateImpact(hotspot);
-    console.error('[geminiClient] impact summary error:', err);
-    return buildTemplateImpact(hotspot);
+    if (err.message === 'NO_API_KEY') return buildTemplateThreatAnalysis(hotspot);
+    console.error('[geminiClient] threat analysis error:', err.message);
+    return buildTemplateThreatAnalysis(hotspot); // not cached — will retry
   }
 }
 
@@ -93,7 +246,7 @@ function buildTemplateForecast(h) {
   return {
     score,
     markdown: `## Species at Risk
-**Yellowfin Tuna** — High risk. A prime target for dark-vessel fleets in open water; population already stressed by overfishing.
+**Yellowfin Tuna** — High risk. A prime target for fishing fleets in open water; population already stressed by heavy vessel pressure.
 **Bigeye Tuna** — High risk. Deep-water feeding patterns make them especially vulnerable to undetected long-line activity.
 **Shark (mixed species)** — High risk. Finning bycatch is common in unmonitored fleets; slow reproduction means populations recover over decades.
 **Mahi-Mahi** — Medium risk. Fast-breeding but heavily targeted as bycatch in tuna operations.
@@ -109,10 +262,19 @@ If illegal activity ceased today, partial recovery could be expected within **3�
   };
 }
 
+const _speciesCache = new Map();
+
+export function getCachedSpeciesImpact(id) {
+  return _speciesCache.get(String(id)) ?? null;
+}
+
 export async function generateSpeciesImpact(hotspot) {
+  const cacheKey = String(hotspot?.id);
+  if (_speciesCache.has(cacheKey)) return _speciesCache.get(cacheKey);
+
   const score = computePressureScore(hotspot);
 
-  const prompt = `You are a marine ecologist analysing the impact of illegal fishing on local fish populations. Use the hotspot data below to identify species at risk and project population trends in plain English — no scientific jargon.
+  const prompt = `You are a marine ecologist analysing the impact of vessel activity on local fish populations. Use the hotspot data below to identify species at risk and project population trends in plain English — no scientific jargon.
 
 HOTSPOT DATA:
 ${hotspotContextBlock(hotspot)}
@@ -130,22 +292,27 @@ List 4 specific species likely present in this ocean region (based on coordinate
 2–3 sentences on the long-term population trend and any ecological tipping points that may be crossed.
 
 ## Recovery Outlook
-1–2 sentences on how long populations would take to recover if illegal fishing stopped today.
+1–2 sentences on how long populations would take to recover if vessel activity in this area stopped today.
 
 Keep all language plain and accessible to a non-scientist reader.`;
 
   try {
     const text = await callGemini(prompt, { temperature: 0.4, maxTokens: 900 });
-    return { score, markdown: text.trim() || buildTemplateForecast(hotspot).markdown };
+    if (text?.trim()) {
+      const result = { score, markdown: text.trim() };
+      _speciesCache.set(cacheKey, result);
+      return result;
+    }
+    return buildTemplateForecast(hotspot); // not cached — will retry
   } catch (err) {
     if (err.message === 'NO_API_KEY') return buildTemplateForecast(hotspot);
-    console.error('[geminiClient] species impact error:', err);
-    return buildTemplateForecast(hotspot);
+    console.error('[geminiClient] species impact error:', err.message);
+    return buildTemplateForecast(hotspot); // not cached — will retry
   }
 }
 
 export async function askAssistant({ question, hotspot }) {
-  const prompt = `You are Orbis AI, a plain-language marine-intelligence assistant. Answer questions about illegal fishing, dark vessels, SAR detections, MPAs, and environmental impact. Keep answers under 150 words. Use short paragraphs or a tight bullet list where useful.
+  const prompt = `You are Orbis AI, a plain-language marine-intelligence assistant. Answer questions about vessel activity, wildlife impact, MPAs, marine ecosystems, and ocean conservation. Keep answers under 150 words. Use short paragraphs or a tight bullet list where useful.
 
 CURRENT HOTSPOT CONTEXT (may be empty):
 ${hotspotContextBlock(hotspot)}
