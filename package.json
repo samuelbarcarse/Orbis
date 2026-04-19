@@ -1,10 +1,12 @@
 {
-  "name": "base44-app",
+  "name": "orbis",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "concurrently -n \"api,web\" -c \"cyan,green\" \"node --watch --env-file=server/.env server/index.js\" \"vite\"",
+    "dev:web": "vite",
+    "dev:api": "node --watch --env-file=server/.env server/index.js",
     "build": "vite build",
     "lint": "eslint . --quiet",
     "lint:fix": "eslint . --fix",
@@ -12,6 +14,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@arcgis/core": "^5.0.17",
+    "@clerk/clerk-react": "^5.61.5",
     "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^4.1.2",
     "@radix-ui/react-accordion": "^1.2.3",
@@ -49,6 +53,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",
     "date-fns": "^3.6.0",
+    "density-clustering": "^1.3.0",
     "embla-carousel-react": "^8.5.2",
     "framer-motion": "^11.16.4",
     "html2canvas": "^1.4.1",
@@ -84,6 +89,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "baseline-browser-mapping": "^2.8.32",
+    "concurrently": "^9.2.1",
     "eslint": "^9.19.0",
     "eslint-plugin-react": "^7.37.4",
     "eslint-plugin-react-hooks": "^5.0.0",

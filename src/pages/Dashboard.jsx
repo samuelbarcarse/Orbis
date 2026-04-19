@@ -1,141 +1,108 @@
 // @ts-nocheck
-import React, { useEffect, useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
-import { useNavigate } from 'react-router-dom';
-import { Loader2, AlertTriangle, Ship, Radar, Waves } from 'lucide-react';
-import { seedDataIfEmpty } from '../lib/seedData';
-
-import Globe from '../components/map/Globe';
-import LayerToggle from '../components/dashboard/LayerToggle';
-import MapLegend from '../components/map/MapLegend';
-import TimezoneOverlay from '../components/map/TimezoneOverlay';
-
-const riskBadge = {
-  critical: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
-  high: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  moderate: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
-  low: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-};
+// Globe-centric single page: 3D Esri SceneView + hotspot side panel + chat assistant.
+import React, { useState, useEffect } from 'react';
+import { UserButton } from '@clerk/clerk-react';
+import { Ship, Radar, AlertTriangle, MousePointerClick } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import EsriScene from '../components/map/EsriScene';
+import HotspotPanel from '../components/map/HotspotPanel';
+import SpeciesForecast from '../components/map/SpeciesForecast';
+import ChatAssistant from '../components/ai/ChatAssistant';
 
 export default function Dashboard() {
-  const navigate = useNavigate();
-  const queryClient = useQueryClient();
-  const [activeLayers, setActiveLayers] = useState(['alerts', 'vessels', 'hotspots']);
-  const [seeding, setSeeding] = useState(false);
-  const [hoveredRegion, setHoveredRegion] = useState(null);
-
-  const { data: regions = [], isLoading: regionsLoading } = useQuery({
-    queryKey: ['regions'],
-    queryFn: () => base44.entities.OceanRegion.list('-risk_score'),
-  });
-
-  const { data: alerts = [] } = useQuery({
-    queryKey: ['alerts'],
-    queryFn: () => base44.entities.VesselAlert.list('-created_date', 50),
-  });
+  const [selectedHotspot, setSelectedHotspot] = useState(null);
+  const [stats, setStats] = useState({ vessels: 0, darkVessels: 0, hotspots: 0 });
+  const [showHint, setShowHint] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [forecastOpen, setForecastOpen] = useState(false);
 
   useEffect(() => {
-    if (!regionsLoading && regions.length === 0 && !seeding) {
-      setSeeding(true);
-      seedDataIfEmpty().then((seeded) => {
-        if (seeded) {
-          queryClient.invalidateQueries({ queryKey: ['regions'] });
-          queryClient.invalidateQueries({ queryKey: ['alerts'] });
-          queryClient.invalidateQueries({ queryKey: ['reports'] });
-        }
-        setSeeding(false);
-      });
-    }
-  }, [regionsLoading, regions.length]);
+    if (selectedHotspot) setShowHint(false);
+  }, [selectedHotspot]);
 
-  const toggleLayer = (id) =>
-    setActiveLayers((prev) => (prev.includes(id) ? prev.filter((l) => l !== id) : [...prev, id]));
-
-  if (regionsLoading || seeding) {
-    return (
-      <div className="flex items-center justify-center h-full bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-          {seeding && <p className="text-sm text-muted-foreground">Initializing marine data...</p>}
-        </div>
-      </div>
-    );
-  }
-
-  const criticalCount = regions.filter((r) => r.risk_level === 'critical').length;
-  const activeAlerts = alerts.filter((a) => a.status === 'active').length;
-  const sarFlags = regions.reduce((sum, r) => sum + (r.anomalous_vessels || 0), 0);
+  const handleDataLoaded = ({ vessels, detections, hotspots }) => {
+    const dark = (detections?.features || []).filter((f) => f.properties?.is_dark).length;
+    setStats({
+      vessels: vessels?.features?.length || 0,
+      darkVessels: dark,
+      hotspots: hotspots?.features?.length || 0,
+    });
+  };
 
   return (
-    <div className="absolute inset-0 overflow-hidden">
-      <Globe
-        regions={regions}
-        alerts={alerts}
-        activeLayers={activeLayers}
-        onRegionClick={(r) => navigate(`/regions/${r.id}`)}
-        onHoverRegion={setHoveredRegion}
-      />
+    <div className="fixed inset-0 bg-[#060b19] overflow-hidden">
+      <EsriScene onSelectHotspot={setSelectedHotspot} onDataLoaded={handleDataLoaded} />
 
-      {/* Top title strip */}
-      <div className="absolute top-4 left-4 right-4 flex items-start justify-between gap-4 pointer-events-none">
-        <div className="pointer-events-auto bg-card/40 backdrop-blur-xl border border-border/60 rounded-xl px-4 py-2.5 shadow-2xl">
-          <h1 className="text-sm font-bold tracking-tight">Marine Risk Theater</h1>
-          <p className="text-[10px] text-muted-foreground mt-0.5">
-            Global vessel intelligence · ESRI · GFW · Sentinel-1 SAR · MongoDB
-          </p>
-        </div>
-
-        <div className="pointer-events-auto flex items-center gap-2">
-          <StatPill icon={AlertTriangle} label="Critical zones" value={criticalCount} accent="text-rose-300" />
-          <StatPill icon={Ship} label="Active alerts" value={activeAlerts} accent="text-amber-300" />
-          <StatPill icon={Radar} label="SAR flags" value={sarFlags} accent="text-fuchsia-300" />
-        </div>
-      </div>
-
-      {/* Left widget stack: layers + legend */}
-      <div className="absolute left-4 top-1/2 -translate-y-1/2 flex flex-col gap-3 pointer-events-auto">
-        <LayerToggle activeLayers={activeLayers} onToggle={toggleLayer} />
-        <MapLegend activeLayers={activeLayers} />
-      </div>
-
-      {/* Right widget: timezones */}
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-auto">
-        <TimezoneOverlay />
-      </div>
-
-      {/* Hover card */}
-      {hoveredRegion && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none">
-          <div className="bg-card/60 backdrop-blur-xl border border-border/60 rounded-xl px-4 py-2.5 shadow-2xl flex items-center gap-3">
-            <Waves className="w-4 h-4 text-primary" />
-            <div className="flex flex-col">
-              <span className="text-[11px] font-semibold">{hoveredRegion.name}</span>
-              <span className="text-[9px] text-muted-foreground">
-                {hoveredRegion.ocean} · Risk {Math.round(hoveredRegion.risk_score || 0)}/100
-              </span>
-            </div>
-            <span
-              className={`text-[9px] font-semibold uppercase px-2 py-0.5 rounded-full border ${
-                riskBadge[hoveredRegion.risk_level] || riskBadge.moderate
-              }`}
-            >
-              {hoveredRegion.risk_level}
-            </span>
-            <span className="text-[9px] text-muted-foreground ml-1">click to open</span>
+      {/* Top bar */}
+      <div className="absolute top-4 left-4 right-4 flex items-start justify-between gap-4 pointer-events-none z-20">
+        <div className="pointer-events-auto bg-background/60 backdrop-blur-xl border border-border/60 rounded-xl px-4 py-2.5 shadow-2xl flex items-center gap-3">
+          <img src="/logo.png" alt="Orbis" className="w-7 h-7 rounded-lg object-cover" />
+          <div>
+            <h1 className="text-sm font-bold tracking-tight">Orbis</h1>
+            <p className="text-[10px] text-muted-foreground">Illegal Fishing Intelligence</p>
           </div>
         </div>
-      )}
+
+        <div className="pointer-events-auto bg-background/60 backdrop-blur-xl border border-border/60 rounded-xl px-2 py-1.5 shadow-2xl">
+          <UserButton afterSignOutUrl="/" />
+        </div>
+      </div>
+
+      {/* Instruction badge */}
+      <AnimatePresence>
+        {showHint && stats.hotspots > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            transition={{ delay: 1.2, duration: 0.4 }}
+            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-20 pointer-events-none"
+          >
+            <div className="flex items-center gap-2 bg-background/70 backdrop-blur-xl border border-border/60 rounded-full px-4 py-2 shadow-xl">
+              <MousePointerClick className="w-3.5 h-3.5 text-primary animate-pulse" />
+              <span className="text-xs text-muted-foreground">Click a <span className="text-destructive font-semibold">red hotspot</span> on the globe to analyze it</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bottom-left stats */}
+      <div className="absolute bottom-4 left-4 flex gap-2 pointer-events-auto z-20">
+        <StatTile icon={Ship} label="AIS Vessels" value={stats.vessels} tone="text-sky-300" />
+        <StatTile icon={AlertTriangle} label="Dark Vessels" value={stats.darkVessels} tone="text-rose-300" />
+        <StatTile icon={Radar} label="Hotspots" value={stats.hotspots} tone="text-amber-300" />
+      </div>
+
+      {/* Slide-in side panel */}
+      <HotspotPanel
+        hotspot={selectedHotspot}
+        onClose={() => setSelectedHotspot(null)}
+        onAskAI={() => setChatOpen(true)}
+        onForecast={() => setForecastOpen(true)}
+      />
+
+      {/* Species forecast modal */}
+      <SpeciesForecast
+        hotspot={forecastOpen ? selectedHotspot : null}
+        onClose={() => setForecastOpen(false)}
+      />
+
+      {/* Floating AI chat */}
+      <ChatAssistant
+        selectedHotspot={selectedHotspot}
+        open={chatOpen}
+        onOpenChange={setChatOpen}
+      />
     </div>
   );
 }
 
-function StatPill({ icon: Icon, label, value, accent }) {
+function StatTile({ icon: Icon, label, value, tone }) {
   return (
-    <div className="bg-card/40 backdrop-blur-xl border border-border/60 rounded-xl px-3 py-2 shadow-2xl flex items-center gap-2.5">
-      <Icon className={`w-3.5 h-3.5 ${accent}`} />
+    <div className="bg-background/60 backdrop-blur-xl border border-border/60 rounded-xl px-3 py-2 shadow-2xl flex items-center gap-2.5 min-w-[120px]">
+      <Icon className={`w-4 h-4 ${tone}`} />
       <div className="flex flex-col leading-tight">
-        <span className={`text-sm font-bold ${accent}`}>{value}</span>
+        <span className={`text-sm font-bold ${tone}`}>{value}</span>
         <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</span>
       </div>
     </div>
