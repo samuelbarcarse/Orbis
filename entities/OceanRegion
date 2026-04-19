@@ -1,0 +1,99 @@
+{
+  "name": "OceanRegion",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Name of the ocean region"
+    },
+    "latitude": {
+      "type": "number",
+      "description": "Center latitude"
+    },
+    "longitude": {
+      "type": "number",
+      "description": "Center longitude"
+    },
+    "risk_score": {
+      "type": "number",
+      "description": "Marine Risk Score 0-100"
+    },
+    "risk_level": {
+      "type": "string",
+      "enum": [
+        "low",
+        "moderate",
+        "high",
+        "critical"
+      ],
+      "description": "Risk classification"
+    },
+    "fishing_intensity": {
+      "type": "number",
+      "description": "Fishing intensity score 0-100"
+    },
+    "ecosystem_fragility": {
+      "type": "number",
+      "description": "Ecosystem fragility score 0-100"
+    },
+    "population_decline": {
+      "type": "number",
+      "description": "Fish population decline percentage"
+    },
+    "coral_coverage": {
+      "type": "number",
+      "description": "Coral reef coverage percentage"
+    },
+    "ocean_temp": {
+      "type": "number",
+      "description": "Average ocean temperature in Celsius"
+    },
+    "biodiversity_index": {
+      "type": "number",
+      "description": "Biodiversity index 0-10"
+    },
+    "protected_area": {
+      "type": "boolean",
+      "description": "Whether this is a marine protected area"
+    },
+    "vessel_count": {
+      "type": "number",
+      "description": "Active vessels in the region"
+    },
+    "anomalous_vessels": {
+      "type": "number",
+      "description": "Vessels with anomalous behavior"
+    },
+    "recovery_status": {
+      "type": "string",
+      "enum": [
+        "none",
+        "recommended",
+        "active",
+        "completed"
+      ],
+      "description": "Current recovery intervention status"
+    },
+    "area_sq_km": {
+      "type": "number",
+      "description": "Area in square kilometers"
+    },
+    "ocean": {
+      "type": "string",
+      "enum": [
+        "Pacific",
+        "Atlantic",
+        "Indian",
+        "Arctic",
+        "Southern"
+      ],
+      "description": "Parent ocean"
+    }
+  },
+  "required": [
+    "name",
+    "latitude",
+    "longitude",
+    "risk_score"
+  ]
+}

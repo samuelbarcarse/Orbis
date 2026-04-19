@@ -1,0 +1,57 @@
+{
+  "name": "ConservationReport",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Report title"
+    },
+    "region_name": {
+      "type": "string",
+      "description": "Associated ocean region"
+    },
+    "report_type": {
+      "type": "string",
+      "enum": [
+        "risk_assessment",
+        "impact_analysis",
+        "recovery_plan",
+        "trend_summary"
+      ],
+      "description": "Type of report"
+    },
+    "summary": {
+      "type": "string",
+      "description": "Brief summary of findings"
+    },
+    "content": {
+      "type": "string",
+      "description": "Full report content in markdown"
+    },
+    "risk_score_at_time": {
+      "type": "number",
+      "description": "Risk score when report was generated"
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of recommendations"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "published",
+        "archived"
+      ],
+      "default": "published"
+    }
+  },
+  "required": [
+    "title",
+    "region_name",
+    "report_type"
+  ]
+}

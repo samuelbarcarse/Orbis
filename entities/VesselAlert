@@ -1,0 +1,63 @@
+{
+  "name": "VesselAlert",
+  "type": "object",
+  "properties": {
+    "vessel_name": {
+      "type": "string",
+      "description": "Name or ID of the vessel"
+    },
+    "alert_type": {
+      "type": "string",
+      "enum": [
+        "ais_gap",
+        "loitering",
+        "speed_anomaly",
+        "boundary_violation",
+        "dark_vessel"
+      ],
+      "description": "Type of anomalous behavior detected"
+    },
+    "severity": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "description": "Alert severity"
+    },
+    "region_name": {
+      "type": "string",
+      "description": "Name of the ocean region"
+    },
+    "latitude": {
+      "type": "number"
+    },
+    "longitude": {
+      "type": "number"
+    },
+    "description": {
+      "type": "string",
+      "description": "Description of the anomalous behavior"
+    },
+    "duration_hours": {
+      "type": "number",
+      "description": "Duration of the anomaly in hours"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "investigating",
+        "resolved",
+        "dismissed"
+      ],
+      "default": "active"
+    }
+  },
+  "required": [
+    "vessel_name",
+    "alert_type",
+    "region_name"
+  ]
+}
