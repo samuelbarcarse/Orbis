@@ -1,7 +1,7 @@
 // @ts-nocheck
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Ship, Anchor, Flag, Gauge, Clock, Tag, Wrench, User, AlertCircle } from 'lucide-react';
+import { X, Ship, Anchor, Flag, Gauge, Clock, Tag, Wrench, User, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@clerk/clerk-react';
 
 // Convert a 2-letter ISO country code to a flag emoji
@@ -30,10 +30,11 @@ function Row({ icon: Icon, label, value, tone = 'text-foreground' }) {
   );
 }
 
-export default function VesselPanel({ vessel, onClose }) {
+export default function VesselPanel({ vessel, onClose, watchlist = [], onToggleWatch }) {
   const { getToken } = useAuth();
-  const [info, setInfo]       = useState(undefined); // undefined = loading, null = not found
+  const [info, setInfo]       = useState(undefined);
   const [loading, setLoading] = useState(false);
+  const isWatched = watchlist.some((w) => (w.mmsi && w.mmsi === vessel?.mmsi) || w.id === vessel?.id);
 
   // Fetch extra vessel details whenever a vessel is selected
   useEffect(() => {
@@ -82,6 +83,17 @@ export default function VesselPanel({ vessel, onClose }) {
               </h2>
               <p className="text-[10px] text-muted-foreground">AIS Fishing Vessel</p>
             </div>
+            <button
+              onClick={() => onToggleWatch?.(vessel)}
+              title={isWatched ? 'Remove from watchlist' : 'Add to watchlist'}
+              className={`p-1.5 rounded-lg transition-colors shrink-0 ${
+                isWatched
+                  ? 'bg-rose-500/20 text-rose-400 hover:bg-rose-500/30'
+                  : 'hover:bg-muted/60 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {isWatched ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg hover:bg-muted/60 transition-colors shrink-0"
@@ -190,9 +202,22 @@ export default function VesselPanel({ vessel, onClose }) {
             )}
           </div>
 
-          {/* Footer: link to GFW */}
-          {vessel.mmsi && (
-            <div className="px-4 py-3 border-t border-border/50 shrink-0">
+          {/* Footer */}
+          <div className="px-4 py-3 border-t border-border/50 shrink-0 space-y-2">
+            <button
+              onClick={() => onToggleWatch?.(vessel)}
+              className={`flex items-center justify-center gap-2 w-full py-2 rounded-lg
+                         text-xs font-semibold transition-colors border ${
+                isWatched
+                  ? 'bg-rose-500/15 hover:bg-rose-500/25 border-rose-500/40 text-rose-400'
+                  : 'bg-muted/40 hover:bg-muted border-border/50 text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {isWatched ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              {isWatched ? 'Remove from watchlist' : 'Add to watchlist'}
+            </button>
+
+            {vessel.mmsi && (
               <a
                 href={`https://globalfishingwatch.org/map/?vessel=${vessel.mmsi}`}
                 target="_blank"
@@ -204,8 +229,8 @@ export default function VesselPanel({ vessel, onClose }) {
                 <Ship className="w-3.5 h-3.5" />
                 View on Global Fishing Watch
               </a>
-            </div>
-          )}
+            )}
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

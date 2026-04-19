@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 import EsriScene from '../components/map/EsriScene';
 import HotspotPanel from '../components/map/HotspotPanel';
 import VesselPanel from '../components/map/VesselPanel';
+import WatchlistPanel from '../components/map/WatchlistPanel';
 import ChatAssistant from '../components/ai/ChatAssistant';
 
 export default function Dashboard() {
@@ -16,12 +17,29 @@ export default function Dashboard() {
   const [showHint, setShowHint] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const sceneRef = useRef(null);
+  const [watchlist, setWatchlist] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('orbis:watchlist') || '[]'); } catch { return []; }
+  });
+
+  const toggleWatch = (vessel) => {
+    setWatchlist((prev) => {
+      const exists = prev.some((w) => (w.mmsi && w.mmsi === vessel.mmsi) || w.id === vessel.id);
+      const next = exists
+        ? prev.filter((w) => w.id !== vessel.id && w.mmsi !== vessel.mmsi)
+        : [...prev, vessel];
+      localStorage.setItem('orbis:watchlist', JSON.stringify(next));
+      sceneRef.current?.updateWatchlist(next);
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (selectedHotspot) setShowHint(false);
   }, [selectedHotspot]);
 
   const handleDataLoaded = ({ vessels, detections, hotspots }) => {
+    // Re-apply watchlist markers after scene reloads
+    setTimeout(() => sceneRef.current?.updateWatchlist(watchlist), 500);
     const dark = (detections?.features || []).filter((f) => f.properties?.is_dark).length;
     setStats({
       vessels: vessels?.features?.length || 0,
@@ -91,10 +109,22 @@ export default function Dashboard() {
         <StatTile icon={Radar} label="Hotspots" value={stats.hotspots} tone="text-amber-300" />
       </div>
 
+      {/* Watchlist sidebar — left */}
+      <WatchlistPanel
+        watchlist={watchlist}
+        onRemove={toggleWatch}
+        onSelect={(v) => {
+          setSelectedVessel(v);
+          sceneRef.current?.zoomToVessel(v);
+        }}
+      />
+
       {/* Vessel detail panel — opens when a ship icon is clicked */}
       <VesselPanel
         vessel={selectedVessel}
         onClose={() => setSelectedVessel(null)}
+        watchlist={watchlist}
+        onToggleWatch={toggleWatch}
       />
 
       {/* Tabbed hotspot panel (Threat Analysis + Species Forecast) */}

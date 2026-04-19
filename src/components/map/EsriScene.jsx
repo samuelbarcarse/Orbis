@@ -10,8 +10,11 @@ import '@arcgis/map-components/dist/components/arcgis-zoom';
 import '@arcgis/map-components/dist/components/arcgis-layer-list';
 import '@arcgis/map-components/dist/components/arcgis-legend';
 
-import GeoJSONLayer from '@arcgis/core/layers/GeoJSONLayer.js';
-import esriConfig  from '@arcgis/core/config.js';
+import GeoJSONLayer  from '@arcgis/core/layers/GeoJSONLayer.js';
+import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer.js';
+import Graphic       from '@arcgis/core/Graphic.js';
+import Point         from '@arcgis/core/geometry/Point.js';
+import esriConfig    from '@arcgis/core/config.js';
 import '@arcgis/core/assets/esri/themes/dark/main.css';
 
 import { useAuth } from '@clerk/clerk-react';
@@ -29,9 +32,10 @@ if (import.meta.env.VITE_ARCGIS_API_KEY) {
 const EMPTY_FC = { type: 'FeatureCollection', features: [] };
 
 const EsriScene = forwardRef(function EsriScene({ onSelectHotspot, onSelectVessel, onDataLoaded }, ref) {
-  const sceneRef  = useRef(null);
-  const viewRef   = useRef(null);
-  const { getToken } = useAuth();
+  const sceneRef         = useRef(null);
+  const viewRef          = useRef(null);
+  const watchLayerRef    = useRef(null);
+  const { getToken }     = useAuth();
 
   const onSelectHotspotRef = useRef(onSelectHotspot);
   const onSelectVesselRef  = useRef(onSelectVessel);
@@ -45,6 +49,31 @@ const EsriScene = forwardRef(function EsriScene({ onSelectHotspot, onSelectVesse
       viewRef.current?.goTo(
         { position: { longitude: 10, latitude: 15, z: 22_000_000 } },
         { duration: 1200, easing: 'ease-in-out' }
+      ).catch(() => {});
+    },
+    updateWatchlist: (vessels) => {
+      const layer = watchLayerRef.current;
+      if (!layer) return;
+      layer.removeAll();
+      vessels.forEach((v) => {
+        if (v.longitude == null || v.latitude == null) return;
+        layer.add(new Graphic({
+          geometry: new Point({ longitude: +v.longitude, latitude: +v.latitude }),
+          symbol: {
+            type: 'simple-marker',
+            style: 'circle',
+            color: [239, 68, 68, 0.25],
+            size: 26,
+            outline: { color: [239, 68, 68, 1], width: 2.5 },
+          },
+        }));
+      });
+    },
+    zoomToVessel: (vessel) => {
+      if (vessel.longitude == null || vessel.latitude == null) return;
+      viewRef.current?.goTo(
+        { target: [+vessel.longitude, +vessel.latitude], zoom: 7, tilt: 20 },
+        { duration: 1000, easing: 'ease-in-out' }
       ).catch(() => {});
     },
   }));
@@ -160,7 +189,9 @@ const EsriScene = forwardRef(function EsriScene({ onSelectHotspot, onSelectVesse
         },
       });
 
-      view.map.addMany([sarLayer, vesselLayer, hotspotsLayer]);
+      const watchLayer = new GraphicsLayer({ title: 'Watched Vessels' });
+      watchLayerRef.current = watchLayer;
+      view.map.addMany([sarLayer, vesselLayer, hotspotsLayer, watchLayer]);
 
       // ── Click: hotspots priority, then vessels ─────────────────────────
       view.on('click', async (clickEvent) => {
@@ -182,7 +213,11 @@ const EsriScene = forwardRef(function EsriScene({ onSelectHotspot, onSelectVesse
 
           const vesselHit = hit.results.find((r) => r.layer === vesselLayer && r.graphic);
           if (vesselHit?.graphic?.attributes) {
-            onSelectVesselRef.current?.(vesselHit.graphic.attributes);
+            onSelectVesselRef.current?.({
+              ...vesselHit.graphic.attributes,
+              latitude:  vesselHit.graphic.geometry?.latitude,
+              longitude: vesselHit.graphic.geometry?.longitude,
+            });
           }
         } catch (err) {
           console.error('[EsriScene] hitTest error:', err);
@@ -194,7 +229,8 @@ const EsriScene = forwardRef(function EsriScene({ onSelectHotspot, onSelectVesse
 
     return () => {
       destroyed = true;
-      viewRef.current = null;
+      viewRef.current     = null;
+      watchLayerRef.current = null;
       el.removeEventListener('arcgisViewReadyChange', handleViewReady);
       blobUrls.forEach((u) => URL.revokeObjectURL(u));
     };
