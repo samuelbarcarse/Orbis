@@ -1,3 +1,10 @@
+/* ArcGIS web components require the host chain to have a defined height */
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;

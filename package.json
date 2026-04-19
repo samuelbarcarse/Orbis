@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@arcgis/core": "^5.0.17",
+    "@arcgis/map-components": "^5.0.17",
     "@clerk/clerk-react": "^5.61.5",
+    "@esri/calcite-components": "^5.0.2",
     "@hello-pangea/dnd": "^17.0.0",
     "@hookform/resolvers": "^4.1.2",
     "@radix-ui/react-accordion": "^1.2.3",

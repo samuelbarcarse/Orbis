@@ -3,6 +3,7 @@ import cors from 'cors';
 import { clerkMiddleware, requireAuth } from '@clerk/express';
 import { connectDB } from './db.js';
 import { seedDatabase } from './seed.js';
+import publicGeojsonRouter from './routes/publicGeojson.js';
 import vesselsRouter from './routes/vessels.js';
 import detectionsRouter from './routes/detections.js';
 import hotspotsRouter from './routes/hotspots.js';
@@ -15,6 +16,9 @@ app.use(express.json());
 app.use(clerkMiddleware());
 
 app.get('/health', (_, res) => res.json({ status: 'ok', db: 'orbis' }));
+
+// Public GeoJSON endpoint — no auth, usable directly in ArcGIS Online
+app.use('/', publicGeojsonRouter);
 
 // All /api routes require a valid Clerk session
 app.use('/api', requireAuth());
