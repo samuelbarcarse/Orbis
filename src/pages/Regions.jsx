@@ -1,36 +1,30 @@
-import React, { useState } from 'react';
+// @ts-nocheck
+import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
 import { Link } from 'react-router-dom';
-import { Loader2, Search, Filter, MapPin, Ship, Waves } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
+import { Loader2, ChevronRight, AlertOctagon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import RiskScoreGauge from '../components/dashboard/RiskScoreGauge';
 
-const riskColors = {
-  critical: 'bg-destructive/10 text-destructive border-destructive/20',
-  high: 'bg-chart-3/10 text-chart-3 border-chart-3/20',
-  moderate: 'bg-chart-1/10 text-chart-1 border-chart-1/20',
-  low: 'bg-accent/10 text-accent border-accent/20',
+const oceanGradients = {
+  Pacific: 'from-sky-500/20 via-sky-400/10 to-transparent',
+  Atlantic: 'from-indigo-500/20 via-indigo-400/10 to-transparent',
+  Indian: 'from-teal-500/20 via-teal-400/10 to-transparent',
+  Arctic: 'from-cyan-400/20 via-cyan-300/10 to-transparent',
+  Southern: 'from-violet-500/20 via-violet-400/10 to-transparent',
+};
+
+const riskDot = {
+  critical: 'bg-rose-400 shadow-[0_0_14px_#f43f5e]',
+  high: 'bg-amber-400 shadow-[0_0_12px_#f59e0b]',
+  moderate: 'bg-sky-400 shadow-[0_0_10px_#38bdf8]',
+  low: 'bg-emerald-400 shadow-[0_0_10px_#34d399]',
 };
 
 export default function Regions() {
-  const [search, setSearch] = useState('');
-  const [riskFilter, setRiskFilter] = useState('all');
-  const [oceanFilter, setOceanFilter] = useState('all');
-
   const { data: regions = [], isLoading } = useQuery({
     queryKey: ['regions'],
     queryFn: () => base44.entities.OceanRegion.list('-risk_score'),
-  });
-
-  const filtered = regions.filter(r => {
-    const matchSearch = !search || r.name?.toLowerCase().includes(search.toLowerCase());
-    const matchRisk = riskFilter === 'all' || r.risk_level === riskFilter;
-    const matchOcean = oceanFilter === 'all' || r.ocean === oceanFilter;
-    return matchSearch && matchRisk && matchOcean;
   });
 
   if (isLoading) {
@@ -41,105 +35,88 @@ export default function Regions() {
     );
   }
 
+  const critical = regions.filter((r) => r.risk_level === 'critical');
+  const rest = regions.filter((r) => r.risk_level !== 'critical');
+
   return (
-    <div className="p-4 lg:p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-bold">Ocean Regions</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">Explore and monitor marine ecosystem zones</p>
-      </div>
+    <div className="p-6 lg:p-8 space-y-8 h-full overflow-y-auto">
+      <header>
+        <p className="text-[11px] uppercase tracking-[0.18em] text-primary/80 font-semibold">Enforcement Priorities</p>
+        <h1 className="text-2xl font-bold tracking-tight mt-1">Regions</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Scan left to right. Critical conditions surface first.
+        </p>
+      </header>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Search regions..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
-          />
-        </div>
-        <Select value={riskFilter} onValueChange={setRiskFilter}>
-          <SelectTrigger className="w-36">
-            <SelectValue placeholder="Risk Level" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Risks</SelectItem>
-            <SelectItem value="critical">Critical</SelectItem>
-            <SelectItem value="high">High</SelectItem>
-            <SelectItem value="moderate">Moderate</SelectItem>
-            <SelectItem value="low">Low</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={oceanFilter} onValueChange={setOceanFilter}>
-          <SelectTrigger className="w-36">
-            <SelectValue placeholder="Ocean" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Oceans</SelectItem>
-            <SelectItem value="Pacific">Pacific</SelectItem>
-            <SelectItem value="Atlantic">Atlantic</SelectItem>
-            <SelectItem value="Indian">Indian</SelectItem>
-            <SelectItem value="Arctic">Arctic</SelectItem>
-            <SelectItem value="Southern">Southern</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {filtered.map(region => (
-          <Link
-            key={region.id}
-            to={`/regions/${region.id}`}
-            className="bg-card border border-border rounded-xl p-5 hover:shadow-lg hover:border-primary/30 transition-all group"
-          >
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold group-hover:text-primary transition-colors">{region.name}</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <Badge variant="outline" className={cn("text-[10px]", riskColors[region.risk_level])}>
-                    {region.risk_level}
-                  </Badge>
-                  {region.ocean && (
-                    <span className="text-xs text-muted-foreground">{region.ocean}</span>
-                  )}
-                </div>
-              </div>
-              <RiskScoreGauge score={region.risk_score || 0} size="sm" />
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div>
-                <p className="text-xs text-muted-foreground">Fishing</p>
-                <p className="text-sm font-semibold">{region.fishing_intensity || 0}%</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Vessels</p>
-                <p className="text-sm font-semibold">{region.vessel_count || 0}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground">Biodiversity</p>
-                <p className="text-sm font-semibold">{region.biodiversity_index || 0}/10</p>
-              </div>
-            </div>
-
-            {region.protected_area && (
-              <div className="mt-3 flex items-center gap-1.5 text-xs text-accent">
-                <Waves className="w-3 h-3" />
-                Marine Protected Area
-              </div>
-            )}
-          </Link>
+      <Rail title="Critical conditions" count={critical.length} accent>
+        {critical.length === 0 && <EmptyRail label="No critical regions right now" />}
+        {critical.map((r) => (
+          <RegionCard key={r.id} region={r} />
         ))}
-      </div>
+      </Rail>
 
-      {filtered.length === 0 && (
-        <div className="text-center py-12">
-          <MapPin className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">No regions match your filters</p>
-        </div>
-      )}
+      <Rail title="All monitored regions" count={rest.length}>
+        {rest.map((r) => (
+          <RegionCard key={r.id} region={r} />
+        ))}
+      </Rail>
     </div>
+  );
+}
+
+function Rail({ title, count, accent, children }) {
+  return (
+    <section>
+      <div className="flex items-baseline gap-3 mb-3">
+        {accent && <AlertOctagon className="w-4 h-4 text-rose-400" />}
+        <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-foreground/70">{title}</h2>
+        <span className="text-[10px] text-muted-foreground">{count}</span>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-3 -mx-6 px-6 lg:-mx-8 lg:px-8 snap-x snap-mandatory scroll-smooth">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function EmptyRail({ label }) {
+  return (
+    <div className="flex-shrink-0 w-56 h-28 rounded-xl border border-dashed border-border/60 flex items-center justify-center">
+      <span className="text-xs text-muted-foreground">{label}</span>
+    </div>
+  );
+}
+
+function RegionCard({ region }) {
+  const gradient = oceanGradients[region.ocean] || oceanGradients.Pacific;
+  const dot = riskDot[region.risk_level] || riskDot.moderate;
+  const isCritical = region.risk_level === 'critical';
+
+  return (
+    <Link
+      to={`/regions/${region.id}`}
+      className={cn(
+        'snap-start flex-shrink-0 w-60 h-28 rounded-xl border p-4 relative overflow-hidden group transition-all',
+        'bg-card/60 border-border/60 hover:border-primary/40 hover:shadow-[0_0_24px_-6px_hsl(var(--primary)/0.4)]',
+        isCritical && 'border-rose-500/40',
+      )}
+    >
+      <div className={cn('absolute inset-0 bg-gradient-to-br opacity-70 pointer-events-none', gradient)} />
+      <div className="relative h-full flex flex-col justify-between">
+        <div className="flex items-start justify-between gap-2">
+          <span className="text-[9px] uppercase tracking-[0.14em] text-muted-foreground">{region.ocean}</span>
+          <div className="flex items-center gap-1.5">
+            <span className={cn('w-2 h-2 rounded-full flex-shrink-0', dot)} />
+            {isCritical && (
+              <span className="text-[9px] font-semibold text-rose-300 uppercase tracking-wider">Critical</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-end justify-between gap-2">
+          <h3 className="text-sm font-semibold leading-tight line-clamp-2">{region.name}</h3>
+          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+        </div>
+      </div>
+    </Link>
   );
 }

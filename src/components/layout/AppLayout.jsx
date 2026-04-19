@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { 
-  LayoutDashboard, Map, FileText, AlertTriangle, 
-  ChevronLeft, ChevronRight, Waves, Settings, LogOut
+import {
+  LayoutDashboard, Map, FileText, AlertTriangle,
+  ChevronLeft, ChevronRight, Settings, LogOut
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { base44 } from '@/api/base44Client';
@@ -28,9 +28,11 @@ export default function AppLayout() {
       )}>
         {/* Logo */}
         <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border">
-          <div className="w-8 h-8 rounded-lg bg-sidebar-primary/20 flex items-center justify-center flex-shrink-0">
-            <Waves className="w-5 h-5 text-sidebar-primary" />
-          </div>
+          <img
+            src="/logo.png"
+            alt="OceanGuard logo"
+            className="w-8 h-8 rounded-lg object-cover flex-shrink-0"
+          />
           {!collapsed && (
             <div className="overflow-hidden">
               <h1 className="text-sm font-bold text-sidebar-foreground tracking-tight">OceanGuard</h1>

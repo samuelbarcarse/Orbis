@@ -46,39 +46,40 @@
   }
 
   .dark {
-    --background: 215 30% 6%;
-    --foreground: 210 15% 92%;
-    --card: 215 28% 9%;
-    --card-foreground: 210 15% 92%;
-    --popover: 215 28% 9%;
-    --popover-foreground: 210 15% 92%;
-    --primary: 190 80% 45%;
-    --primary-foreground: 215 30% 6%;
-    --secondary: 215 20% 14%;
-    --secondary-foreground: 210 15% 85%;
-    --muted: 215 18% 14%;
-    --muted-foreground: 210 12% 55%;
-    --accent: 170 60% 42%;
-    --accent-foreground: 215 30% 6%;
-    --destructive: 4 75% 50%;
+    /* Deep maritime navy — shifted from near-black to true ocean blue */
+    --background: 220 55% 6%;
+    --foreground: 210 25% 94%;
+    --card: 220 50% 10%;
+    --card-foreground: 210 25% 94%;
+    --popover: 220 50% 10%;
+    --popover-foreground: 210 25% 94%;
+    --primary: 200 95% 55%;
+    --primary-foreground: 220 55% 6%;
+    --secondary: 220 40% 16%;
+    --secondary-foreground: 210 25% 90%;
+    --muted: 220 38% 15%;
+    --muted-foreground: 215 20% 62%;
+    --accent: 180 70% 48%;
+    --accent-foreground: 220 55% 6%;
+    --destructive: 350 80% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 215 18% 16%;
-    --input: 215 18% 16%;
-    --ring: 190 80% 45%;
-    --chart-1: 190 80% 50%;
-    --chart-2: 170 60% 45%;
-    --chart-3: 35 90% 60%;
-    --chart-4: 4 80% 60%;
-    --chart-5: 260 50% 60%;
+    --border: 220 40% 20%;
+    --input: 220 40% 20%;
+    --ring: 200 95% 55%;
+    --chart-1: 200 95% 60%;
+    --chart-2: 180 70% 48%;
+    --chart-3: 35 95% 62%;
+    --chart-4: 350 80% 62%;
+    --chart-5: 280 70% 68%;
 
-    --sidebar-background: 215 32% 5%;
-    --sidebar-foreground: 210 15% 85%;
-    --sidebar-primary: 190 80% 50%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 215 25% 12%;
-    --sidebar-accent-foreground: 210 15% 85%;
-    --sidebar-border: 215 20% 12%;
-    --sidebar-ring: 190 80% 50%;
+    --sidebar-background: 222 58% 5%;
+    --sidebar-foreground: 210 25% 90%;
+    --sidebar-primary: 200 95% 60%;
+    --sidebar-primary-foreground: 222 58% 5%;
+    --sidebar-accent: 220 45% 12%;
+    --sidebar-accent-foreground: 210 25% 90%;
+    --sidebar-border: 220 45% 14%;
+    --sidebar-ring: 200 95% 60%;
   }
 }
 
@@ -91,30 +92,11 @@
   }
 }
 
-.leaflet-container {
-  background: hsl(215 30% 8%) !important;
-  border-radius: var(--radius);
+/* Custom scrollbar for the dark maritime theme */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(220 40% 22% / 0.7);
+  border-radius: 999px;
 }
-
-.leaflet-control-zoom a {
-  background: hsl(215 28% 12%) !important;
-  color: hsl(210 15% 85%) !important;
-  border-color: hsl(215 18% 18%) !important;
-}
-
-.leaflet-control-attribution {
-  background: hsl(215 28% 9% / 0.8) !important;
-  color: hsl(210 12% 55%) !important;
-  font-size: 10px !important;
-}
-
-.leaflet-popup-content-wrapper {
-  background: hsl(215 28% 9%) !important;
-  color: hsl(210 15% 92%) !important;
-  border-radius: var(--radius) !important;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.4) !important;
-}
-
-.leaflet-popup-tip {
-  background: hsl(215 28% 9%) !important;
-}
+::-webkit-scrollbar-thumb:hover { background: hsl(200 95% 40% / 0.5); }
